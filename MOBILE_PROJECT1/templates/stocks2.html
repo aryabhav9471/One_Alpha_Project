@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Stocks</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css">
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            padding: 20px;
+            height: 100vh;
+            /* Increase the height to 80% of viewport height */
+        }
+
+        #statsTable {
+            margin-top: 20px;
+            text-align: center; /* Align the table content to the center */
+            margin-left: auto; /* Center the table horizontally */
+            margin-right: auto; /* Center the table horizontally */
+        }
+
+        #statsTable th {
+            width: 200px;
+            text-align: center;
+        }
+
+        #statsTable td {
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Select Stock</h1>
+        <form>
+            <div class="form-group">
+                <label for="stockSelect">Stocks:</label>
+                <select class="form-control select2" id="stockSelect">
+                    {% for symbol in symbols|sort %}
+                    <option>{{ symbol }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="timeRangeSelect">Time Range:</label>
+                <select class="form-control" id="timeRangeSelect">
+                    <option value="1D">1 Day</option>
+                    <option value="1W">1 Week</option>
+                    <option value="1M">1 Month</option>
+                    <option value="1Y">1 Year</option>
+                    <option value="All">Whole Data</option>
+                </select>
+            </div>
+            <button class="btn btn-primary btn-block" id="generateBtn">Generate Stats</button>
+        </form>
+        <br>
+        <center><p style="font-size: medium;">Statistics</p></center>
+        <table id="statsTable" class="table"></table>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+    <script>
+$(document).ready(function () {
+  $('.select2').select2();
+
+  function generateStats(selectedSymbol, selectedTimeRange) {
+    var url;
+    if (selectedTimeRange === 'All') {
+      url = 'http://192.168.29.36:5000/stock_data/' + selectedSymbol + '/All';
+    } else {
+      url = 'http://192.168.29.36:5000/stock_data/' + selectedSymbol + '/' + selectedTimeRange;
+    }
+
+    fetch(url)
+      .then(response => response.json())
+      .then(data => {
+        if (selectedTimeRange !== '1D') {
+          // Group data by date and select the latest value for each day
+          var groupedData = {};
+          for (var i = 0; i < data.length; i++) {
+            var row = data[i];
+            var date = new Date(row.date);
+            var currentDate = date.toLocaleDateString('en-US');
+            if (!groupedData[currentDate] || date > new Date(groupedData[currentDate].date)) {
+              groupedData[currentDate] = row;
+            }
+          }
+          data = Object.values(groupedData);
+        }
+
+        // Calculate return percentage
+        var initialPrice = data[0].adj_close;
+        var finalPrice = data[data.length - 1].adj_close;
+        var returnPercentage = ((finalPrice - initialPrice) / initialPrice) * 100;
+
+        // Calculate drawdown
+        var peak = 0;
+        var drawdown = 0;
+        for (var i = 0; i < data.length; i++) {
+          var price = data[i].adj_close;
+          if (price > peak) {
+            peak = price;
+          } else {
+            var currentDrawdown = ((peak - price) / peak) * 100;
+            if (currentDrawdown > drawdown) {
+              drawdown = currentDrawdown;
+            }
+          }
+        }
+
+        // Calculate Sharpe ratio (assuming risk-free rate of 5%)
+        var returns = data.map(row => parseFloat(row.adj_close));
+
+        // Calculate the average return
+        var averageReturn = returns.reduce((a, b) => a + b, 0) / returns.length;
+
+        // Set the risk-free rate
+        var riskFreeRate = 0.05;
+
+        // Calculate the standard deviation
+        var squaredDifferences = returns.map(returnValue => Math.pow(returnValue - averageReturn, 2));
+        var meanSquaredDifference = squaredDifferences.reduce((a, b) => a + b, 0) / squaredDifferences.length;
+        var standardDeviation = Math.sqrt(meanSquaredDifference);
+
+        // Calculate the Sharpe ratio
+        var sharpeRatio = ((averageReturn / 100) - riskFreeRate) / standardDeviation;
+
+        // Output calculations to the console
+        console.log('Return Percentage:', returnPercentage.toFixed(2));
+        console.log('Drawdown:', drawdown.toFixed(2));
+        console.log('Sharpe Ratio:', sharpeRatio.toFixed(2));
+
+        // Print adj_close values
+        for (var i = 0; i < data.length; i++) {
+          console.log('adj_close[' + i + ']:', data[i].adj_close);
+        }
+
+        // Create the table HTML
+        var tableHTML = '';
+        tableHTML += '<tr><th>Return (%)</th><td style="color:' + (returnPercentage >= 0 ? 'green' : 'red') + ';">' + returnPercentage.toFixed(2) + '</td></tr>';
+        tableHTML += '<tr><th>Drawdown (%)</th><td style="color:red;">' + drawdown.toFixed(2) + '</td></tr>';
+        tableHTML += '<tr><th>Sharpe Ratio</th><td style="color:blue;">' + sharpeRatio.toFixed(2) + '</td></tr>';
+
+        $('#statsTable').html(tableHTML);
+      })
+      .catch(error => {
+        console.error('Error:', error);
+      });
+  }
+
+  $('#generateBtn').click(function (e) {
+    e.preventDefault();
+    var selectedSymbol = $('#stockSelect').val();
+    var selectedTimeRange = $('#timeRangeSelect').val();
+    generateStats(selectedSymbol, selectedTimeRange);
+  });
+});
+    </script>
+</body>
+
+</html>

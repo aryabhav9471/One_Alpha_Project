@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Stocks</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css">
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            padding: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Select Stock</h1>
+        <form>
+            <div class="form-group">
+                <label for="stockSelect">Stocks:</label>
+                <select class="form-control select2" id="stockSelect">
+                    {% for symbol in symbols|sort %}
+                    <option>{{ symbol }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="timeRangeSelect">Time Range:</label>
+                <select class="form-control" id="timeRangeSelect">
+                    <option value="1D">1 Day</option>
+                    <option value="1W">1 Week</option>
+                    <option value="1M">1 Month</option>
+                    <option value="1Y">1 Year</option>
+                    <option value="All">Whole Data</option>
+                </select>
+            </div>
+            <button class="btn btn-primary btn-block" id="generateBtn">Generate Table</button>
+        </form>
+        <div id="tableContainer" class="mt-4"></div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            $('.select2').select2();
+
+            function formatDate(dateString, includeTime) {
+                var date = new Date(dateString);
+                date.setHours(date.getHours() - 5);
+                date.setMinutes(date.getMinutes() - 30);
+                var options = {
+                    weekday: 'short',
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric'
+                };
+                if (includeTime) {
+                    options.hour = 'numeric';
+                    options.minute = 'numeric';
+                    options.second = 'numeric';
+                } else {
+                    options.hour = undefined;
+                    options.minute = undefined;
+                    options.second = undefined;
+                }
+                return date.toLocaleDateString('en-US', options);
+            }
+
+            function generateTable(selectedSymbol, selectedTimeRange) {
+                var url;
+                if (selectedTimeRange === 'All') {
+                    url = 'http://127.0.0.1:5000/stock_data/' + selectedSymbol + '/All';
+                } else {
+                    url = 'http://127.0.0.1:5000/stock_data/' + selectedSymbol + '/' + selectedTimeRange;
+                }
+                $.get(url, function (data) {
+                    var tableHTML = '<table class="table"><thead><tr><th>Date</th><th>Adj Close</th></tr></thead><tbody>';
+                    var latestValues = {}; // Dictionary to store latest values for each date
+                    data.forEach(function (row) {
+                        var formattedDate = formatDate(row.date, selectedTimeRange === '1D');
+                        if (selectedTimeRange === '1D') {
+                            tableHTML += '<tr><td>' + formattedDate + '</td><td>' + row.adj_close + '</td></tr>';
+                        } else if (selectedTimeRange === '1W' || selectedTimeRange === '1M' || selectedTimeRange === '1Y' || selectedTimeRange === 'All') {
+                            var rowDate = new Date(row.date);
+                            var rowDateOnly = new Date(rowDate.getFullYear(), rowDate.getMonth(), rowDate.getDate());
+                            var dateString = rowDateOnly.toLocaleDateString('en-US');
+                            if (latestValues[dateString] === undefined || rowDate > latestValues[dateString].date) {
+                                latestValues[dateString] = { date: rowDate, adj_close: row.adj_close };
+                            }
+                        }
+                    });
+
+                    // Display the latest values from the dictionary
+                    Object.keys(latestValues).forEach(function (dateString) {
+                        var latestValue = latestValues[dateString];
+                        var formattedDate = formatDate(latestValue.date, false);
+                        tableHTML += '<tr><td>' + formattedDate + '</td><td>' + latestValue.adj_close + '</td></tr>';
+                    });
+
+                    tableHTML += '</tbody></table>';
+
+                    $('#tableContainer').html(tableHTML);
+                });
+            }
+
+            $('#generateBtn').click(function (e) {
+                e.preventDefault();
+                var selectedSymbol = $('#stockSelect').val();
+                var selectedTimeRange = $('#timeRangeSelect').val();
+                generateTable(selectedSymbol, selectedTimeRange);
+            });
+        });
+    </script>
+</body>
+
+</html>

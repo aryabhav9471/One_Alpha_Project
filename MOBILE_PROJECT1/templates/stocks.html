@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Stocks</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css">
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            padding: 20px;
+        }
+
+        #graph {
+            width: 100%;
+            height: 60vh;
+            /* Adjust the height percentage as per your preference */
+            overflow: auto;
+            /* Add overflow property for scrolling on small screens */
+        }
+
+        #graph .plot-container .plotly .modebar {
+            display: none;
+        }
+
+        #graph::-webkit-scrollbar {
+            display: none;
+            /* Hide scrollbar on Chrome, Safari, and Opera */
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Select Stock</h1>
+        <form>
+            <div class="form-group">
+                <label for="stockSelect">Stocks:</label>
+                <select class="form-control select2" id="stockSelect">
+                    {% for symbol in symbols|sort %}
+                    <option>{{ symbol }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="timeRangeSelect">Time Range:</label>
+                <select class="form-control" id="timeRangeSelect">
+                    <option value="1D">1 Day</option>
+                    <option value="1W">1 Week</option>
+                    <option value="1M">1 Month</option>
+                    <option value="1Y">1 Year</option>
+                    <option value="All">Whole Data</option>
+                </select>
+            </div>
+            <button class="btn btn-primary btn-block" id="generateBtn">Generate Graph</button>
+        </form>
+        <div id="graph" class="mt-4"></div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            $('.select2').select2();
+
+            function generateGraph(selectedSymbol, selectedTimeRange) {
+                $('#graph').empty();
+                var url;
+                if (selectedTimeRange === 'All') {
+                    url = 'http://127.0.0.1:5000/stock_data/' + selectedSymbol + '/All';
+                } else {
+                    url = 'http://127.0.0.1:5000/stock_data/' + selectedSymbol + '/' + selectedTimeRange;
+                }
+                $.get(url, function (data) {
+                    var dates = data.map(function (row) {
+                        var date = new Date(row.date);
+                        if (selectedTimeRange !== '1D' || selectedTimeRange == '1D') {
+                            date.setUTCHours(date.getUTCHours() - 5); // Subtract 5 hours for the desired time adjustment
+                            date.setUTCMinutes(date.getUTCMinutes() - 30); // Subtract 30 minutes for the desired time adjustment
+                        }
+                        return date;
+                    });
+
+                    var adjClose = data.map(function (row) {
+                        return row.adj_close;
+                    });
+
+                    if (selectedTimeRange === '1W' || selectedTimeRange === '1M' || selectedTimeRange === '1Y') {
+                        // Select only the latest adj_close for each day
+                        var filteredDates = [];
+                        var filteredAdjClose = [];
+                        var uniqueDates = [];
+
+                        for (var i = dates.length - 1; i >= 0; i--) {
+                            var currentDate = dates[i].toLocaleDateString('en-US');
+                            if (!uniqueDates.includes(currentDate)) {
+                                uniqueDates.push(currentDate);
+                                filteredDates.unshift(dates[i]);
+                                filteredAdjClose.unshift(adjClose[i]);
+                            }
+                        }
+
+                        dates = filteredDates;
+                        adjClose = filteredAdjClose;
+
+                        // Generate tick values using the filtered dates
+                        var tickData = filteredDates.map(function (date) {
+                            return date.toLocaleDateString('en-US', { timeZone: 'GMT' });
+                        });
+                    } else {
+                        // Generate tick values for other time ranges
+                        var tickData = dates.map(function (date) {
+                            return date.toLocaleDateString('en-US', { timeZone: 'GMT' });
+                        });
+                    }
+
+                    var trace = {
+                        x: dates,
+                        y: adjClose,
+                        type: 'scatter',
+                        mode: 'lines',
+                        name: selectedSymbol,
+                        line: {
+                            color: 'lightblue' // Set the line color to light blue
+                        }
+                    };
+
+                    var layout = {
+                        xaxis: {
+                            type: 'date',
+                            ticktext: tickData,
+                            tickfont: {
+                                size: 8, // Adjust the tick label size as per your preference
+                                color: 'white',
+                                weight: 'bold'
+                            },
+                            rangebreaks: [
+                                {
+                                    pattern: 'day of week',
+                                    bounds: [6, 1] // Exclude Saturdays and Sundays
+                                }
+                            ]
+                        },
+                        yaxis: {
+                            title: '',
+                            tickfont: {
+                                color: 'white',
+                                weight: 'bold' // Set the tick label color to white and bold
+                            }
+                        },
+                        autosize: true, // Enable automatic resizing of the graph
+                        margin: {
+                            l: 40,
+                            r: 10,
+                            t: 50,
+                            b: 40
+                        },
+                        // Disable zoom and pan interactions
+                        hovermode: false,
+                        dragmode: false,
+                        selectdirection: 'h',
+                        showZoom: false,
+                        showPan: false,
+                        displayModeBar: false,
+                        plot_bgcolor: 'black', // Set the graph background color to black
+                        paper_bgcolor: 'black' // Set the plot area background color to black
+                    };
+
+                    var data = [trace];
+
+                    Plotly.newPlot('graph', data, layout);
+                });
+            }
+
+            $('#generateBtn').click(function (e) {
+                e.preventDefault();
+                var selectedSymbol = $('#stockSelect').val();
+                var selectedTimeRange = $('#timeRangeSelect').val();
+                generateGraph(selectedSymbol, selectedTimeRange);
+            });
+        });
+
+    </script>
+
+</body>
+
+</html>

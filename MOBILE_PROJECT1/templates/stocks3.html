@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Stocks</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css">
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            padding: 20px;
+        }
+
+        #graph {
+            width: 100%;
+            height: 70vh;
+            overflow: auto;
+        }
+
+        #graph .plot-container .plotly .modebar {
+            display: none;
+        }
+
+        #graph::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Select Stock</h1>
+        <form>
+            <div class="form-group">
+                <label for="stockSelect">Stocks:</label>
+                <select class="form-control select2" id="stockSelect">
+                    {% for symbol in symbols|sort %}
+                    <option>{{ symbol }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </form>
+        <div id="graph" class="mt-4"></div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            $('.select2').select2();
+
+            function generateGraph(selectedSymbol) {
+                var url = 'http://192.168.29.36:5000/stock_data/' + selectedSymbol + '/1D';
+
+                $.get(url, function (data) {
+                    var dates = data.map(function (row) {
+                        var date = new Date(row.date);
+                        date.setUTCHours(date.getUTCHours() - 5);
+                        date.setUTCMinutes(date.getUTCMinutes() - 30);
+                        return date;
+                    });
+
+                    var open = data.map(function (row) {
+                        return row.open;
+                    });
+
+                    var low = data.map(function (row) {
+                        return row.low;
+                    });
+
+                    var close = data.map(function (row) {
+                        return row.close;
+                    });
+
+                    var high = data.map(function (row) {
+                        return row.high;
+                    });
+
+                    var trace = {
+                        x: dates,
+                        open: open,
+                        low: low,
+                        close: close,
+                        high: high,
+                        type: 'candlestick',
+                        xaxis: 'x',
+                        yaxis: 'y',
+                        decreasing: { line: { color: '#FF0000' } },
+                        increasing: { line: { color: '#00FF00' } },
+                        hovertemplate: '<b>Date: %{x}</b><br>' +
+                            'Open: %{open}<br>' +
+                            'Low: %{low}<br>' +
+                            'Close: %{close}<br>' +
+                            'High: %{high}<br>',
+                    };
+
+                    var layout = {
+                        xaxis: {
+                            type: 'date',
+                            tickfont: {
+                                size: 8,
+                                color: 'white',
+                                weight: 'bold'
+                            }
+                        },
+                        yaxis: {
+                            title: 'Adj Close',
+                            tickfont: {
+                                color: 'white',
+                                weight: 'bold'
+                            }
+                        },
+                        autosize: true,
+                        margin: {
+                            l: 40,
+                            r: 10,
+                            t: 50,
+                            b: 40
+                        },
+                        hovermode: 'x',
+                        dragmode: false,
+                        selectdirection: 'h',
+                        showZoom: false,
+                        showPan: false,
+                        displayModeBar: false,
+                        plot_bgcolor: 'black',
+                        paper_bgcolor: 'black'
+                    };
+
+                    var data = [trace];
+
+                    Plotly.newPlot('graph', data, layout);
+                });
+            }
+
+            $('#stockSelect').change(function () {
+                var selectedSymbol = $(this).val();
+                generateGraph(selectedSymbol);
+            });
+
+            setInterval(function () {
+                var selectedSymbol = $('#stockSelect').val();
+                generateGraph(selectedSymbol);
+            }, 5000);
+        });
+
+    </script>
+</body>
+
+</html>
