@@ -7,28 +7,34 @@ from datetime import datetime
 from time import sleep
 
 # Fetch database credentials from environment variables
-MYSQL_HOST = os.getenv("DB_HOST", "localhost")
-MYSQL_USER = os.getenv("DB_USER", "root")
-MYSQL_PASSWORD = os.getenv("DB_PASSWORD", "Aryabhav@2004")  # Change before deployment
-MYSQL_DATABASE = os.getenv("DB_NAME", "stock")
+MYSQL_HOST = os.getenv("DB_HOST", "sql12.freesqldatabase.com")
+MYSQL_USER = os.getenv("DB_USER", "sql12766961")
+MYSQL_PASSWORD = os.getenv("DB_PASSWORD", "VKqi5BgQpv")  # Change before deployment
+MYSQL_DATABASE = os.getenv("DB_NAME", "sql12766961")
+MYSQL_PORT = int(os.getenv("DB_PORT", 3306))
 
 # Function to establish a MySQL connection
 def get_db_connection():
-    return mysql.connector.connect(
-        host=MYSQL_HOST,
-        user=MYSQL_USER,
-        password=MYSQL_PASSWORD,
-        database=MYSQL_DATABASE
-    )
+    try:
+        return mysql.connector.connect(
+            host=MYSQL_HOST,
+            user=MYSQL_USER,
+            password=MYSQL_PASSWORD,
+            database=MYSQL_DATABASE,
+            port=MYSQL_PORT
+        )
+    except mysql.connector.Error as err:
+        print(f"❌ Database connection error: {err}")
+        return None
 
 # Function to fetch stock data and insert into MySQL
 def fetch_data(symbol):
     try:
-        # Download latest stock data
+        print(f"📡 Fetching data for {symbol}...")
         data = yf.download(symbol, period='1d')
 
         if 'Adj Close' not in data.columns:
-            print(f"Skipping {symbol}: No 'Adj Close' column in data.")
+            print(f"⚠️ Skipping {symbol}: No 'Adj Close' column in data.")
             return
 
         data.reset_index(inplace=True)
@@ -46,6 +52,9 @@ def fetch_data(symbol):
 
         # Connect to MySQL
         cnx = get_db_connection()
+        if not cnx:
+            return  # Skip if no connection
+
         cursor = cnx.cursor()
 
         # Check for existing data
@@ -74,11 +83,15 @@ def fetch_and_insert_data(symbols):
         pool.map(fetch_data, symbols)
 
 if __name__ == '__main__':
-    # Load stock symbols from CSV
-    df_symbols = pd.read_csv('Company_list1.csv')
-    df_symbols['symbol'] = df_symbols['symbol'] + '.NS'
-    symbols = df_symbols['symbol'].dropna().tolist()
+    try:
+        # Load stock symbols from CSV
+        df_symbols = pd.read_csv('Company_list1.csv')
+        df_symbols['symbol'] = df_symbols['symbol'] + '.NS'
+        symbols = df_symbols['symbol'].dropna().tolist()
 
-    while True:
-        fetch_and_insert_data(symbols)
-        sleep(30)  # Fetch data every 30 seconds
+        while True:
+            fetch_and_insert_data(symbols)
+            sleep(30)  # Fetch data every 30 seconds
+
+    except Exception as e:
+        print(f"❌ Error in main loop: {e}")

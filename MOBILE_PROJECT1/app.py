@@ -9,19 +9,29 @@ app = Flask(__name__)
 CORS(app)
 
 # Fetch environment variables for security
-MYSQL_HOST = os.getenv('MYSQL_HOST', 'localhost')
-MYSQL_USER = os.getenv('MYSQL_USER', 'root')
-MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD', 'Aryabhav@2004')
-MYSQL_DB = os.getenv('MYSQL_DB', 'stock')
+MYSQL_HOST = os.getenv('MYSQL_HOST', 'sql12.freesqldatabase.com')
+MYSQL_USER = os.getenv('MYSQL_USER', 'sql12766961')
+MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD', 'VKqi5BgQpv')
+MYSQL_DB = os.getenv('MYSQL_DB', 'sql12766961')
+MYSQL_PORT = int(os.getenv('MYSQL_PORT', 3306))
 
 def get_db_connection():
     """Establish and return a database connection."""
-    return MySQLdb.connect(host=MYSQL_HOST, user=MYSQL_USER, passwd=MYSQL_PASSWORD, db=MYSQL_DB)
+    try:
+        return MySQLdb.connect(
+            host=MYSQL_HOST, user=MYSQL_USER, passwd=MYSQL_PASSWORD, db=MYSQL_DB, port=MYSQL_PORT
+        )
+    except Exception as e:
+        print(f"Database connection error: {e}")
+        return None
 
 def fetch_symbols(table_name):
     """Fetch distinct stock symbols from a given table."""
+    db = get_db_connection()
+    if not db:
+        return jsonify({"error": "Database connection failed"})
+    
     try:
-        db = get_db_connection()
         cursor = db.cursor()
         cursor.execute(f"SELECT DISTINCT symbol FROM {table_name}")
         results = cursor.fetchall()
@@ -37,13 +47,6 @@ def get_stocks():
         return jsonify(symbols)
     return render_template('stocks.html', symbols=symbols)
 
-@app.route('/stocks1', methods=['GET'])
-def get_stocks1():
-    symbols = fetch_symbols("stock_data")
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return jsonify(symbols)
-    return render_template('stocks1.html', symbols=symbols)
-
 @app.route('/stocks2', methods=['GET'])
 def get_stocks2():
     symbols = fetch_symbols("stock_data")
@@ -51,24 +54,13 @@ def get_stocks2():
         return jsonify(symbols)
     return render_template('stocks2.html', symbols=symbols)
 
-@app.route('/stocks3', methods=['GET'])
-def get_stocks3():
-    symbols = fetch_symbols("stock_data1")
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return jsonify(symbols)
-    return render_template('stocks3.html', symbols=symbols)
-
-@app.route('/stocks4', methods=['GET'])
-def get_stocks4():
-    symbols = fetch_symbols("stock_data1")
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return jsonify(symbols)
-    return render_template('stocks4.html', symbols=symbols)
-
 @app.route('/stock_data/<symbol>/<time_range>', methods=['GET'])
 def get_stock_data(symbol, time_range):
+    db = get_db_connection()
+    if not db:
+        return jsonify({"error": "Database connection failed"})
+    
     try:
-        db = get_db_connection()
         cursor = db.cursor()
         today = datetime.date.today()
         time_deltas = {'1D': 0, '1W': 7, '1M': 30, '1Y': 365}
